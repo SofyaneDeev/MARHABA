@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useState } from 'react';
 import { Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { CityPicker } from '@/components/CityPicker';
@@ -39,13 +39,16 @@ export default function CitiesScreen() {
   const city = cityByName(guide, cityName);
 
   // The trip planner can ask for a city ("Plan my tour in Marrakech").
+  // React's pattern for following a changing value: update while rendering, once per new request.
   const request = useCityRequest();
-  useEffect(() => {
+  const [handled, setHandled] = useState(request);
+  if (request !== handled) {
+    setHandled(request);
     if (request.city) {
       setCityName(request.city);
       setView('cities');
     }
-  }, [request]);
+  }
 
   function openCity(c: City) {
     setCityName(c.name);
