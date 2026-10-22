@@ -1,0 +1,9 @@
+# Store text files with LF so the Linux build machine reads them correctly.
+* text=auto eol=lf
+# Windows scripts keep Windows line endings.
+*.bat text eol=crlf
+# Images are binary.
+*.png binary
+*.jpg binary
+*.webp binary
+*.ttf binary
