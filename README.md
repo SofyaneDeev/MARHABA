@@ -77,7 +77,12 @@ npm test
 
 The chat calls the `ask` Supabase Edge Function in the `marhaba` project (ref `wsqnlpyuohrmnosltqju`). Its code is in `supabase/functions/ask/index.ts`. Deploy changes with `supabase functions deploy ask`.
 
-The function needs the `ANTHROPIC_API_KEY` secret, set under **Edge Functions → Secrets** in the Supabase dashboard. The anon key in `.env` is public by design; the Claude key must never be in this app.
+The function needs an AI key, set under **Edge Functions → Secrets** in the Supabase dashboard:
+
+- `GEMINI_API_KEY`: Google Gemini (`gemini-flash-latest`). This is the one in use now, on the free tier from aistudio.google.com. Google may use free-tier chats to improve its products.
+- `ANTHROPIC_API_KEY`: Claude. Used only when no Gemini key is set. To switch to Claude, delete the Gemini secret.
+
+The anon key in `.env` is public by design; the AI keys must never be in this app.
 
 ## Editing the city guide
 

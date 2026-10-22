@@ -1,13 +1,18 @@
-// Marhaba "ask" function: receives the chat from the app, asks Claude, returns the reply.
-// The Claude API key is a Supabase secret (ANTHROPIC_API_KEY) and never reaches the app.
+// Marhaba "ask" function: receives the chat from the app, asks an AI model, returns the reply.
+// The API key is a Supabase secret and never reaches the app:
+//   GEMINI_API_KEY    → Google Gemini (free tier available at aistudio.google.com)
+//   ANTHROPIC_API_KEY → Claude (used when no Gemini key is set)
 import Anthropic from "npm:@anthropic-ai/sdk";
 
-const apiKey = Deno.env.get("ANTHROPIC_API_KEY")?.trim();
-const client = apiKey ? new Anthropic({ apiKey }) : null;
+const geminiKey = Deno.env.get("GEMINI_API_KEY")?.trim();
+const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY")?.trim();
+const claude = !geminiKey && anthropicKey ? new Anthropic({ apiKey: anthropicKey }) : null;
 
-const MODEL = "claude-opus-5-5";
+const GEMINI_MODEL = "gemini-flash-latest";
+const CLAUDE_MODEL = "claude-opus-5-5";
 const MAX_TURNS = 12;
 const MAX_CHARS_PER_TURN = 2000;
+const MAX_OUTPUT_TOKENS = 4000;
 
 const SYSTEM = `You are Marhaba, a friendly, practical travel companion for tourists visiting Morocco.
 - Answer in the same language the traveller writes in.
@@ -29,6 +34,13 @@ function json(body: unknown, status = 200): Response {
 
 type Turn = { role: "user" | "assistant"; content: string };
 
+/** An error to send back to the app with this status. */
+class ReplyError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+  }
+}
+
 // Accept only a short, well-formed conversation that starts and ends on a user turn.
 function cleanTurns(input: unknown): Turn[] | null {
   if (!Array.isArray(input)) return null;
@@ -43,11 +55,62 @@ function cleanTurns(input: unknown): Turn[] | null {
   return turns;
 }
 
+async function askGemini(key: string, messages: Turn[]): Promise<string> {
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: SYSTEM }] },
+      contents: messages.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
+      generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS },
+    }),
+  });
+  if (res.status === 429) throw new ReplyError(429, "Busy, try again soon.");
+  if (!res.ok) {
+    console.error("Gemini API error", res.status, await res.text());
+    throw new ReplyError(502, "The assistant is unavailable.");
+  }
+  const data = await res.json();
+  const candidate = data.candidates?.[0];
+  if (!candidate && data.promptFeedback?.blockReason) return "I can't help with that one. Try asking another way.";
+  return (candidate?.content?.parts ?? [])
+    .flatMap((p: { text?: string; thought?: boolean }) => (p.text && !p.thought ? [p.text] : []))
+    .join("")
+    .trim();
+}
+
+async function askClaude(client: Anthropic, messages: Turn[]): Promise<string> {
+  try {
+    const response = await client.beta.messages.create({
+      model: CLAUDE_MODEL,
+      max_tokens: MAX_OUTPUT_TOKENS,
+      system: SYSTEM,
+      output_config: { effort: "low" }, // chat answers don't need deep thinking
+      // If Claude declines a message, the API retries it on a suitable fallback model.
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default",
+      messages,
+    });
+    if (response.stop_reason === "refusal") return "I can't help with that one. Try asking another way.";
+    return response.content
+      .flatMap((block) => (block.type === "text" ? [block.text] : []))
+      .join("\n")
+      .trim();
+  } catch (err) {
+    if (err instanceof Anthropic.RateLimitError) throw new ReplyError(429, "Busy, try again soon.");
+    if (err instanceof Anthropic.APIError) {
+      console.error("Claude API error", err.status, err.message);
+      throw new ReplyError(502, "The assistant is unavailable.");
+    }
+    throw err;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers });
   if (req.method !== "POST") return json({ error: "Use POST." }, 405);
-  if (!client) {
-    console.error("ANTHROPIC_API_KEY is not set. Add it under Edge Functions > Secrets.");
+  if (!geminiKey && !claude) {
+    console.error("No AI key is set. Add GEMINI_API_KEY (or ANTHROPIC_API_KEY) under Edge Functions > Secrets.");
     return json({ error: "The assistant is not configured." }, 503);
   }
 
@@ -61,32 +124,11 @@ Deno.serve(async (req) => {
   if (!messages) return json({ error: "Send a conversation that ends with a user message." }, 400);
 
   try {
-    const response = await client.beta.messages.create({
-      model: MODEL,
-      max_tokens: 4000,
-      system: SYSTEM,
-      output_config: { effort: "low" }, // chat answers don't need deep thinking
-      // If Claude declines a message, the API retries it on a suitable fallback model.
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
-      messages,
-    });
-
-    if (response.stop_reason === "refusal") {
-      return json({ reply: "I can't help with that one. Try asking another way." });
-    }
-    const reply = response.content
-      .flatMap((block) => (block.type === "text" ? [block.text] : []))
-      .join("\n")
-      .trim();
+    const reply = geminiKey ? await askGemini(geminiKey, messages) : await askClaude(claude!, messages);
     if (!reply) return json({ error: "Empty reply." }, 502);
     return json({ reply });
   } catch (err) {
-    if (err instanceof Anthropic.RateLimitError) return json({ error: "Busy, try again soon." }, 429);
-    if (err instanceof Anthropic.APIError) {
-      console.error("Claude API error", err.status, err.message);
-      return json({ error: "The assistant is unavailable." }, 502);
-    }
+    if (err instanceof ReplyError) return json({ error: err.message }, err.status);
     console.error(err);
     return json({ error: "Server error." }, 500);
   }
