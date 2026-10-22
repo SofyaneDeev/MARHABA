@@ -40,7 +40,7 @@ const WELCOME: ChatMessage = {
  * Phones that draw edge to edge don't shrink the screen for the keyboard, so the
  * chat box would hide behind it; phones that do shrink it get 0 here.
  */
-function useKeyboardPadding(ref: RefObject<View | null>, onShow: () => void) {
+function useKeyboardPadding(ref: RefObject<ComponentRef<typeof View> | null>, onShow: () => void) {
   const [padding, setPadding] = useState(0);
   const keyboardTop = useRef<number | null>(null);
 
@@ -76,7 +76,7 @@ function useKeyboardPadding(ref: RefObject<View | null>, onShow: () => void) {
 export default function AskScreen() {
   const c = useThemeColors();
   const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
-  const rootRef = useRef<View>(null);
+  const rootRef = useRef<ComponentRef<typeof View>>(null);
   const scrollToEnd = useCallback(() => {
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
   }, []);
