@@ -19,6 +19,9 @@ const Easing = new Proxy({}, { get: () => (..._args: unknown[]) => (t: number) =
 
 const Animated = { View, Text, Image, createAnimatedComponent };
 
+// Jest loads this file with require(). Declared here because Node's types are not in the app's tsconfig.
+declare const module: { exports: unknown };
+
 module.exports = {
   __esModule: true,
   default: Animated,
