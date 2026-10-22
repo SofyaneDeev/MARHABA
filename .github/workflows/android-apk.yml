@@ -44,18 +44,9 @@ jobs:
 
       - name: Check types, lint and tests
         run: |
-          status=0
-          npx tsc --noEmit > tsc.txt 2>&1 || status=1
-          npx expo lint > lint.txt 2>&1 || status=1
-          npm test -- --ci > test.txt 2>&1 || status=1
-          cat tsc.txt lint.txt test.txt
-          if [ $status -ne 0 ]; then
-            for f in tsc.txt lint.txt test.txt; do
-              msg=$(grep -E "error|✕|●|Expected|Received|Unable to find|TypeError|Cannot" "$f" | head -40 | tr '\n' '~' | sed 's/%/%25/g' | cut -c1-3500)
-              [ -n "$msg" ] && echo "::error title=$f::$msg"
-            done
-          fi
-          exit $status
+          npx tsc --noEmit
+          npx expo lint
+          npm test -- --ci
 
       - name: Generate the Android project
         run: npx expo prebuild --platform android --no-install
