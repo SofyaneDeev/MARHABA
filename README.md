@@ -79,7 +79,7 @@ The chat calls the `ask` Supabase Edge Function in the `marhaba` project (ref `w
 
 The function needs an AI key, set under **Edge Functions → Secrets** in the Supabase dashboard:
 
-- `GEMINI_API_KEY`: Google Gemini (`gemini-flash-latest`). This is the one in use now, on the free tier from aistudio.google.com. Google may use free-tier chats to improve its products.
+- `GEMINI_API_KEY`: Google Gemini (`gemini-flash-latest`, switching to `gemini-flash-lite-latest` when it is busy or slow). This is the one in use now, on the free tier from aistudio.google.com. Google may use free-tier chats to improve its products.
 - `ANTHROPIC_API_KEY`: Claude. Used only when no Gemini key is set. To switch to Claude, delete the Gemini secret.
 
 The anon key in `.env` is public by design; the AI keys must never be in this app.

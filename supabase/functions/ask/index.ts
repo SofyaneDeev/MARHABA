@@ -8,7 +8,11 @@ const geminiKey = Deno.env.get("GEMINI_API_KEY")?.trim();
 const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY")?.trim();
 const claude = !geminiKey && anthropicKey ? new Anthropic({ apiKey: anthropicKey }) : null;
 
-const GEMINI_MODEL = "gemini-flash-latest";
+// Tried in order. "Lite" is faster and less often overloaded on the free tier.
+const GEMINI_MODELS = [
+  { model: "gemini-flash-latest", timeoutMs: 35_000 },
+  { model: "gemini-flash-lite-latest", timeoutMs: 40_000 },
+];
 const CLAUDE_MODEL = "claude-opus-5-5";
 const MAX_TURNS = 12;
 const MAX_CHARS_PER_TURN = 2000;
@@ -56,21 +60,39 @@ function cleanTurns(input: unknown): Turn[] | null {
 }
 
 async function askGemini(key: string, messages: Turn[]): Promise<string> {
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: SYSTEM }] },
-      contents: messages.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
-      generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS },
-    }),
+  const body = JSON.stringify({
+    systemInstruction: { parts: [{ text: SYSTEM }] },
+    contents: messages.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
+    generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS },
   });
-  if (res.status === 429) throw new ReplyError(429, "Busy, try again soon.");
-  if (!res.ok) {
-    console.error("Gemini API error", res.status, await res.text());
-    throw new ReplyError(502, "The assistant is unavailable.");
+
+  // Free-tier models are often overloaded or slow, so each one gets a time limit and the
+  // next is tried when it fails. Together they stay under the app's 90-second limit.
+  let busy = false;
+  for (const { model, timeoutMs } of GEMINI_MODELS) {
+    let status: number;
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+        body,
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (res.ok) return geminiText(await res.json());
+      status = res.status;
+      console.error(`Gemini ${model} error`, status, await res.text());
+    } catch (err) {
+      console.error(`Gemini ${model} gave no answer in time`, err);
+      continue;
+    }
+    if (status === 400 || status === 403) break; // a bad request or key: other models won't help
+    if (status === 429) busy = true;
   }
-  const data = await res.json();
+  throw busy ? new ReplyError(429, "Busy, try again soon.") : new ReplyError(502, "The assistant is unavailable.");
+}
+
+// deno-lint-ignore no-explicit-any
+function geminiText(data: any): string {
   const candidate = data.candidates?.[0];
   if (!candidate && data.promptFeedback?.blockReason) return "I can't help with that one. Try asking another way.";
   return (candidate?.content?.parts ?? [])
