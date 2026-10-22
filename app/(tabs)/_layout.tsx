@@ -1,11 +1,13 @@
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { Tabs } from 'expo-router';
+import { router, Tabs } from 'expo-router';
+import { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View, type ColorValue } from 'react-native';
 
 import { useClientOnlyValue } from '@/components/useClientOnlyValue';
 import { useWelcome } from '@/components/Welcome';
 import { ZelligePattern } from '@/components/Zellige';
 import { fonts, palette, useThemeColors } from '@/constants/theme';
+import { takeStartChoice } from '@/lib/nav';
 
 function TabIcon({ name, color }: { name: SymbolViewProps['name']; color: ColorValue }) {
   return <SymbolView name={name} tintColor={color} size={24} />;
@@ -40,6 +42,14 @@ function HeaderBackground() {
 export default function TabLayout() {
   const c = useThemeColors();
 
+  // "Plan my tour" on the start screen opens the Cities tab; "Plan my trip" stays on Trip.
+  useEffect(() => {
+    if (takeStartChoice() === 'tour') {
+      const t = setTimeout(() => router.navigate('/medina'), 0);
+      return () => clearTimeout(t);
+    }
+  }, []);
+
   return (
     <Tabs
       screenOptions={{
@@ -53,6 +63,8 @@ export default function TabLayout() {
         headerTitleAlign: 'left',
         headerRight: () => <HeaderArabic />,
         sceneStyle: { backgroundColor: c.background },
+        // While typing (e.g. in Ask), the keyboard gets the space, not the tab bar.
+        tabBarHideOnKeyboard: true,
         // Disable the static render of the header on web
         // to prevent a hydration error in React Navigation.
         headerShown: useClientOnlyValue(false, true),
@@ -60,9 +72,9 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Ask',
+          title: 'Trip',
           tabBarIcon: ({ color }) => (
-            <TabIcon name={{ ios: 'bubble.left.and.bubble.right', android: 'chat', web: 'chat' }} color={color} />
+            <TabIcon name={{ ios: 'airplane', android: 'flight', web: 'flight' }} color={color} />
           ),
         }}
       />
@@ -99,6 +111,15 @@ export default function TabLayout() {
           title: 'Tools',
           tabBarIcon: ({ color }) => (
             <TabIcon name={{ ios: 'square.grid.2x2', android: 'apps', web: 'apps' }} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="ask"
+        options={{
+          title: 'Ask',
+          tabBarIcon: ({ color }) => (
+            <TabIcon name={{ ios: 'bubble.left.and.bubble.right', android: 'chat', web: 'chat' }} color={color} />
           ),
         }}
       />

@@ -4,7 +4,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import BookScreen from '@/app/(tabs)/book';
 import RequestScreen from '@/app/request/[id]';
-import AskScreen from '@/app/(tabs)/index';
+import AskScreen from '@/app/(tabs)/ask';
 import MedinaScreen from '@/app/(tabs)/medina';
 import PhrasesScreen from '@/app/(tabs)/phrases';
 import SosScreen from '@/app/sos';

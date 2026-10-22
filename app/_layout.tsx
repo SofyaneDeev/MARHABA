@@ -9,10 +9,12 @@ import { useEffect, useMemo, useState } from 'react';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
+import { StartChoiceScreen } from '@/components/StartChoice';
 import { WelcomeContext, WelcomeScreen } from '@/components/Welcome';
 import { fonts, palette } from '@/constants/theme';
 import { FavouritesProvider } from '@/lib/favourites';
 import { GuideProvider } from '@/lib/guide';
+import { setStartChoice } from '@/lib/nav';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -36,6 +38,8 @@ export default function RootLayout() {
   });
   // null until we know whether this is the first launch.
   const [welcomeSeen, setWelcomeSeen] = useState<boolean | null>(null);
+  // After "Get Started": choose between planning the trip (flights) or the tour (cities).
+  const [choosing, setChoosing] = useState(false);
 
   // Expo Router uses Error Boundaries to catch errors in the navigation tree.
   useEffect(() => {
@@ -62,15 +66,21 @@ export default function RootLayout() {
     return null;
   }
 
-  if (!welcomeSeen) {
+  if (!welcomeSeen && choosing) {
     return (
-      <WelcomeScreen
-        onStart={() => {
+      <StartChoiceScreen
+        onChoose={(choice) => {
+          setStartChoice(choice);
+          setChoosing(false);
           setWelcomeSeen(true);
           AsyncStorage.setItem(WELCOME_SEEN_KEY, '1').catch(() => {});
         }}
       />
     );
+  }
+
+  if (!welcomeSeen) {
+    return <WelcomeScreen onStart={() => setChoosing(true)} />;
   }
 
   return (

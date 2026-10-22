@@ -1,6 +1,6 @@
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { createContext, useContext, useEffect } from 'react';
-import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -26,7 +26,6 @@ export const useWelcome = () => useContext(WelcomeContext);
 
 // The guide in a Moroccan street, cropped from the welcome artwork without its text.
 const SCENE = require('@/assets/images/welcome-scene.jpg');
-const SCENE_RATIO = 940 / 722;
 // Colours sampled from the artwork so the code-drawn parts join it seamlessly.
 const SCENE_BLUE = '#0C45C5';
 const SCENE_WHITE = '#F6FAFD';
@@ -60,8 +59,8 @@ function SpelledOut({ text, style, start, step = 60 }: { text: string; style: ob
   );
 }
 
-/** The scene, with a slow zoom in and out so the street feels alive. */
-function LivingScene({ width }: { width: number }) {
+/** The scene fills the space left between the title and the panel, with a slow zoom so the street feels alive. */
+function LivingScene() {
   const reduceMotion = useReducedMotion();
   const zoom = useSharedValue(1);
 
@@ -74,10 +73,11 @@ function LivingScene({ width }: { width: number }) {
   const zoomStyle = useAnimatedStyle(() => ({ transform: [{ scale: zoom.get() }] }));
 
   return (
-    <Animated.View entering={FadeIn.delay(T_SCENE).duration(700)} style={[styles.sceneFrame, { width, height: width / SCENE_RATIO }]}>
+    <Animated.View entering={FadeIn.delay(T_SCENE).duration(700)} style={styles.sceneFrame}>
       <Animated.Image
         source={SCENE}
-        style={[{ width, height: width / SCENE_RATIO }, zoomStyle]}
+        resizeMode="cover"
+        style={[styles.sceneImage, zoomStyle]}
         accessibilityRole="image"
         accessibilityLabel="Your Marhaba guide in a fez and djellaba, in a blue Moroccan street with mountains behind"
       />
@@ -87,15 +87,16 @@ function LivingScene({ width }: { width: number }) {
 
 export function WelcomeScreen({ onStart }: { onStart: () => void }) {
   const insets = useSafeAreaInsets();
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height } = useWindowDimensions();
   const width = Math.min(windowWidth, MAX_WIDTH);
+  // Small phones: tighter spacing so everything fits on one screen, with no scrolling.
+  const compact = height < 760;
 
   return (
     <View style={styles.root}>
-      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 20 }]} bounces={false}>
-        <View style={[styles.column, { width }]}>
+      <View style={[styles.column, { width, paddingBottom: insets.bottom + (compact ? 10 : 18) }]}>
           {/* Title band in the artwork's blue, with the zellige lattice drifting behind. */}
-          <View style={[styles.band, { paddingTop: insets.top + 30 }]}>
+          <View style={[styles.band, { paddingTop: insets.top + (compact ? 12 : 24) }]}>
             <DriftingZellige id="welcome-zellige" />
             <SpelledOut text="Marhaba" style={styles.latin} start={0} />
             <Animated.Text entering={ZoomIn.delay(T_ARABIC).duration(550)} style={styles.arabic} accessibilityLabel="Marhaba in Arabic">
@@ -107,10 +108,10 @@ export function WelcomeScreen({ onStart }: { onStart: () => void }) {
             </Animated.Text>
           </View>
 
-          <LivingScene width={width} />
+          <LivingScene />
 
-          <View style={styles.panel}>
-            <Animated.Text entering={FadeInUp.delay(T_PANEL).duration(500)} style={styles.headline}>
+          <View style={[styles.panel, compact && styles.panelCompact]}>
+            <Animated.Text entering={FadeInUp.delay(T_PANEL).duration(500)} style={[styles.headline, compact && styles.headlineCompact]}>
               Your Morocco adventure starts here
             </Animated.Text>
             <Animated.Text entering={FadeInUp.delay(T_PANEL + 100).duration(500)} style={styles.sub}>
@@ -136,23 +137,20 @@ export function WelcomeScreen({ onStart }: { onStart: () => void }) {
               </PressableScale>
             </Animated.View>
 
-            <Animated.Text entering={FadeIn.delay(T_PANEL + 1000)} style={styles.motto}>
-              Explore · Ask · Enjoy
-            </Animated.Text>
-            <Animated.Text entering={FadeIn.delay(T_PANEL + 1100)} style={styles.footnote}>
-              “Marhaba” means welcome in Arabic. “Ansuf” (ⴰⵏⵙⵓⴼ) means welcome in Amazigh.
-            </Animated.Text>
+            {compact ? null : (
+              <Animated.Text entering={FadeIn.delay(T_PANEL + 1100)} style={styles.footnote}>
+                “Marhaba” means welcome in Arabic. “Ansuf” (ⴰⵏⵙⵓⴼ) means welcome in Amazigh.
+              </Animated.Text>
+            )}
           </View>
-        </View>
-      </ScrollView>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: SCENE_WHITE },
-  content: { flexGrow: 1, alignItems: 'center' },
-  column: { flexGrow: 1, backgroundColor: SCENE_WHITE },
+  root: { flex: 1, backgroundColor: SCENE_WHITE, alignItems: 'center' },
+  column: { flex: 1, backgroundColor: SCENE_WHITE },
   band: { backgroundColor: SCENE_BLUE, alignItems: 'center', paddingBottom: 6, overflow: 'hidden', gap: 2 },
   row: { flexDirection: 'row' },
   latin: { fontFamily: fonts.display, fontSize: 46, lineHeight: 56, color: '#FFFFFF' },
@@ -160,9 +158,12 @@ const styles = StyleSheet.create({
   tifinagh: { fontFamily: fonts.tifinagh, fontSize: 22, color: palette.saffron, marginHorizontal: 2 },
   tagline: { fontFamily: fonts.body, fontSize: 15, color: 'rgba(255,255,255,0.88)', marginTop: 2 },
   // The artwork's arch opens out of the blue band, so they touch with no gap.
-  sceneFrame: { overflow: 'hidden', marginTop: -1 },
-  panel: { paddingHorizontal: 22, paddingTop: 4, alignItems: 'center', gap: 14 },
+  sceneFrame: { flex: 1, minHeight: 90, overflow: 'hidden', marginTop: -1 },
+  sceneImage: { width: '100%', height: '100%' },
+  panel: { paddingHorizontal: 22, paddingTop: 10, alignItems: 'center', gap: 12 },
+  panelCompact: { gap: 8, paddingTop: 6 },
   headline: { fontFamily: fonts.display, fontSize: 27, lineHeight: 34, color: INK, textAlign: 'center' },
+  headlineCompact: { fontSize: 23, lineHeight: 29 },
   sub: { fontFamily: fonts.body, fontSize: 15, lineHeight: 22, color: '#4A5585', textAlign: 'center', maxWidth: 380 },
   features: { flexDirection: 'row', alignSelf: 'stretch', marginTop: 4 },
   feature: { flex: 1, alignItems: 'center', gap: 6, paddingHorizontal: 4 },
@@ -180,6 +181,5 @@ const styles = StyleSheet.create({
   },
   startText: { fontFamily: fonts.bold, fontSize: 18, color: '#FFFFFF' },
   startArrow: { fontFamily: fonts.bold, fontSize: 20, color: '#FFFFFF' },
-  motto: { fontFamily: fonts.medium, fontSize: 13, color: '#6C76A3', letterSpacing: 0.5 },
   footnote: { fontFamily: fonts.body, fontSize: 11.5, color: '#8890B5', textAlign: 'center', maxWidth: 320 },
 });

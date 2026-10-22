@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { CityPicker } from '@/components/CityPicker';
@@ -22,6 +22,7 @@ import { parkKindLabel, type Park } from '@/data/parks';
 import { seasonOf } from '@/data/seasons';
 import { placeId } from '@/lib/favourites';
 import { cityByName, useGuide, type Guide } from '@/lib/guide';
+import { useCityRequest } from '@/lib/nav';
 
 type View3 = 'cities' | 'seasons' | 'parks';
 const VIEWS: { id: View3; label: string }[] = [
@@ -36,6 +37,15 @@ export default function CitiesScreen() {
   // Kept by name, so the page follows the guide when a newer version loads.
   const [cityName, setCityName] = useState<string | null>(null);
   const city = cityByName(guide, cityName);
+
+  // The trip planner can ask for a city ("Plan my tour in Marrakech").
+  const request = useCityRequest();
+  useEffect(() => {
+    if (request.city) {
+      setCityName(request.city);
+      setView('cities');
+    }
+  }, [request]);
 
   function openCity(c: City) {
     setCityName(c.name);
